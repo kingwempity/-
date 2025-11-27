@@ -75,6 +75,15 @@ python manage.py runserver 0.0.0.0:8000
 
 访问 http://127.0.0.1:8000/ 即可使用系统。
 
+### 默认账户
+
+- **超级管理员**
+  - 用户名：SuperAdmin
+  - 密码：Admin@5521
+
+- **学生测试账户**
+  - 用户名：TC-A-001
+  - 密码：TEST@001
 
 ## 功能模块
 
@@ -349,18 +358,131 @@ Dashboard模块提供了丰富的数据可视化展示：
 - 30分钟无操作自动登出
 - 每次请求更新会话过期时间
 - 防止会话固定攻击
+- HttpOnly Cookie防止XSS窃取会话
 
-### 3. 数据安全
+### 3. XSS攻击防护 ⭐
 
-- 使用Django ORM防止SQL注入
-- 模板自动转义防止XSS攻击
-- CSRF Token保护所有修改类操作
+系统实现了多层XSS防护机制：
+
+#### 3.1 输入过滤
+- **后端过滤**：使用`apps.utils.xss_protection`模块清理用户输入
+- **危险字符检测**：自动识别和记录可疑的XSS攻击尝试
+- **输入验证**：严格验证所有用户输入的类型、长度和格式
+
+#### 3.2 输出转义
+- **Django模板转义**：模板引擎默认对所有变量进行HTML转义
+- **JavaScript转义**：Dashboard等页面使用`escapeHtml()`函数转义动态内容
+- **API响应清理**：确保API返回的数据在前端渲染时被正确转义
+
+#### 3.3 安全响应头
+- **X-XSS-Protection**: `1; mode=block` - 启用浏览器XSS过滤器
+- **X-Content-Type-Options**: `nosniff` - 防止MIME类型嗅探
+- **Content-Security-Policy (CSP)**: 限制资源加载来源，防止内联脚本执行
+- **Referrer-Policy**: 控制Referer头信息泄露
+- **Permissions-Policy**: 禁用不必要的浏览器API
+
+#### 3.4 安全中间件
+- **XSSProtectionMiddleware**: 自动为所有响应添加安全头
+- **InputSanitizationMiddleware**: 检测和记录可疑的XSS攻击尝试
+
+#### 3.5 测试工具
+- **单元测试**: `apps/utils/tests.py` - 测试XSS防护函数
+- **手动测试脚本**: `test_xss_attack.py` - 模拟真实XSS攻击场景
+
+### 4. SQL注入防护
+
+- 使用Django ORM进行所有数据库操作，自动参数化查询
+- 禁止拼接SQL语句
+- 严格的输入验证和类型检查
+
+### 5. CSRF攻击防护
+
+- CSRF Token保护所有修改类操作（POST、PUT、DELETE）
+- 自动验证Token有效性
+- AJAX请求支持CSRF保护
+
+### 6. 数据安全
+
 - 敏感数据加密存储（可扩展）
+- 密码使用bcrypt/PBKDF2哈希
+- 数据库连接加密（可配置）
 
-### 4. 事务支持
+### 7. 事务支持
 
 - 借阅和归还操作使用数据库事务，确保数据一致性
 - 使用InnoDB存储引擎支持事务
+
+## XSS防护使用指南
+
+### 开发者指南
+
+在开发新功能时，请遵循以下XSS防护最佳实践：
+
+#### 1. 后端开发
+
+```python
+from apps.utils.xss_protection import clean_input, escape_html
+
+# 清理用户输入
+user_input = request.POST.get('title')
+cleaned_input = clean_input(user_input, max_length=200)
+
+# 保存到数据库
+book.title = cleaned_input
+book.save()
+```
+
+#### 2. 前端模板
+
+```django
+{# Django模板会自动转义，无需额外处理 #}
+<h1>{{ book.title }}</h1>
+
+{# 如果确实需要输出HTML，请谨慎使用|safe #}
+<div>{{ sanitized_html|safe }}</div>
+```
+
+#### 3. JavaScript开发
+
+```javascript
+// 使用escapeHtml函数转义用户数据
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 在使用innerHTML前转义数据
+container.innerHTML = `<h1>${escapeHtml(userInput)}</h1>`;
+```
+
+### 测试XSS防护
+
+#### 自动化测试
+
+```bash
+# 运行单元测试
+python manage.py test apps.utils.tests
+
+# 运行手动测试脚本
+python test_xss_attack.py
+```
+
+#### 手动测试
+
+尝试在输入框中输入以下XSS payload：
+
+```html
+<script>alert('XSS')</script>
+<img src=x onerror=alert(1)>
+<svg onload=alert(1)>
+javascript:alert(1)
+```
+
+预期结果：
+- ✓ 输入被正确转义或过滤
+- ✓ 页面不执行恶意脚本
+- ✓ 开发者工具中可以看到转义后的内容
 
 ## 项目结构
 
@@ -408,14 +530,70 @@ Process/
 - 对高频查询字段建立索引
 - 使用数据库连接池（CONN_MAX_AGE）
 
+## 安全最佳实践
+
+### 生产环境配置
+
+在部署到生产环境前，请确保：
+
+1. **关闭DEBUG模式**
+```python
+DEBUG = False
+```
+
+2. **使用强密钥**
+```python
+SECRET_KEY = os.environ.get('SECRET_KEY')  # 从环境变量读取
+```
+
+3. **配置ALLOWED_HOSTS**
+```python
+ALLOWED_HOSTS = ['your-domain.com', 'www.your-domain.com']
+```
+
+4. **启用HTTPS**
+```python
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+```
+
+5. **加强CSP策略**
+```python
+# 移除'unsafe-inline'，使用nonce或hash
+CSP_SCRIPT_SRC = ("'self'", "https://cdn.example.com")
+```
+
+### 安全监控
+
+系统会自动记录以下安全事件：
+
+- 可疑的XSS攻击尝试
+- 失败的登录尝试
+- 权限验证失败
+- CSRF Token验证失败
+
+日志文件位置：查看Django的logging配置
+
+### 安全更新
+
+定期更新依赖包以修复安全漏洞：
+
+```bash
+pip install --upgrade django mysqlclient
+pip list --outdated
+```
+
 ## 后续改进方向
 
-1. **数据加密**：对敏感字段（学号、手机号等）进行加密存储
-2. **审计日志**：记录关键操作的审计日志
-3. **通知系统**：集成邮件/短信通知，提醒用户逾期
-4. **缓存优化**：使用Redis缓存热点数据
-5. **API版本控制**：为API接口添加版本前缀
-6. **单元测试**：补充完整的单元测试和集成测试
+1. ✅ **XSS防护**：完整的XSS攻击防护机制（已完成）
+2. **数据加密**：对敏感字段（学号、手机号等）进行加密存储
+3. **审计日志**：记录关键操作的审计日志
+4. **通知系统**：集成邮件/短信通知，提醒用户逾期
+5. **缓存优化**：使用Redis缓存热点数据
+6. **API版本控制**：为API接口添加版本前缀
+7. **WAF集成**：集成Web应用防火墙，增强安全防护
+8. **安全扫描**：定期进行自动化安全扫描
 
 ## 许可证
 
@@ -427,6 +605,5 @@ Process/
 
 ---
 
-**最后更新**：2025年1月
-
+**最后更新**：2025年11月
 

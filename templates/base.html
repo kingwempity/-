@@ -107,6 +107,24 @@
     </div>
 
     <script>
+      /**
+       * XSS防护：HTML转义函数
+       * 将特殊字符转换为HTML实体，防止XSS攻击
+       * @param {string} text - 需要转义的文本
+       * @returns {string} 转义后的安全文本
+       */
+      function escapeHtml(text) {
+        if (text === null || text === undefined) {
+          return '';
+        }
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+      }
+      
+      // 导出到全局作用域，供其他脚本使用
+      window.escapeHtml = escapeHtml;
+      
       // Theme toggle with localStorage, prefers-color-scheme as fallback
       (function () {
         const root = document.documentElement;

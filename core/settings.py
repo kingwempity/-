@@ -52,6 +52,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Custom security middleware - 自定义安全中间件
+    'apps.middleware.security.XSSProtectionMiddleware',
+    'apps.middleware.security.InputSanitizationMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -143,6 +146,36 @@ CSRF_TRUSTED_ORIGINS = []
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 X_FRAME_OPTIONS = 'DENY'
+
+# XSS Protection Settings - XSS攻击防护配置
+# 启用浏览器内置的XSS过滤器（已废弃但仍有部分浏览器支持）
+SECURE_BROWSER_XSS_FILTER = True
+
+# 防止浏览器猜测内容类型，强制使用Content-Type头中声明的类型
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Content Security Policy (CSP) - 内容安全策略
+# 限制资源加载来源，防止XSS攻击
+# 注意：生产环境应该更严格地配置CSP
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "'unsafe-inline'",  # 允许内联脚本（开发环境，生产环境应移除）
+    "https://cdn.tailwindcss.com",
+    "https://unpkg.com",
+    "https://cdn.jsdelivr.net",
+)
+CSP_STYLE_SRC = (
+    "'self'",
+    "'unsafe-inline'",  # 允许内联样式（TailwindCSS需要）
+    "https://cdn.tailwindcss.com",
+)
+CSP_IMG_SRC = ("'self'", "data:", "https:")
+CSP_FONT_SRC = ("'self'", "data:", "https:")
+CSP_CONNECT_SRC = ("'self'",)
+CSP_FRAME_ANCESTORS = ("'none'",)  # 等同于X-Frame-Options: DENY
+CSP_BASE_URI = ("'self'",)
+CSP_FORM_ACTION = ("'self'",)
 
 # Session security settings - 会话安全管理
 # 浏览器关闭时会话过期（解决浏览器意外退出后仍保持登录的安全问题）

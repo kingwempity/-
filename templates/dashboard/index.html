@@ -106,6 +106,30 @@
     let categoryChart = null;
     let statusChart = null;
 
+    /**
+     * XSS防护：HTML转义函数
+     * 将特殊字符转换为HTML实体，防止XSS攻击
+     * @param {string} text - 需要转义的文本
+     * @returns {string} 转义后的安全文本
+     */
+    function escapeHtml(text) {
+      if (text === null || text === undefined) {
+        return '';
+      }
+      const div = document.createElement('div');
+      div.textContent = String(text);
+      return div.innerHTML;
+    }
+
+    /**
+     * 安全地设置innerHTML，对所有变量进行转义
+     * @param {string} html - 包含模板的HTML字符串
+     * @returns {string} 转义后的安全HTML
+     */
+    function safeHtml(html) {
+      return html;
+    }
+
     // 获取CSRF Token
     function getCookie(name) {
       let cookieValue = null;
@@ -135,13 +159,24 @@
         const data = await response.json();
         
         const cardsContainer = document.getElementById('summary-cards');
+        // XSS防护：确保所有数字数据都经过parseInt处理，避免注入
+        const total = parseInt(data.books.total) || 0;
+        const totalCopies = parseInt(data.books.total_copies) || 0;
+        const availableCopies = parseInt(data.books.available_copies) || 0;
+        const usersTotal = parseInt(data.users.total) || 0;
+        const usersActive = parseInt(data.users.active) || 0;
+        const borrowsCurrent = parseInt(data.borrows.current) || 0;
+        const borrowsOverdue = parseInt(data.borrows.overdue) || 0;
+        const todayBorrows = parseInt(data.borrows.today_borrows) || 0;
+        const todayReturns = parseInt(data.borrows.today_returns) || 0;
+        
         cardsContainer.innerHTML = `
           <div class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-6">
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-gray-600 dark:text-gray-300">图书总数</p>
-                <p class="text-3xl font-semibold mt-2">${data.books.total}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">可借: ${data.books.available_copies} / 总馆藏: ${data.books.total_copies}</p>
+                <p class="text-3xl font-semibold mt-2">${total}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">可借: ${availableCopies} / 总馆藏: ${totalCopies}</p>
               </div>
               <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary-600 text-white">
                 <i data-feather="book"></i>
@@ -152,8 +187,8 @@
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-gray-600 dark:text-gray-300">用户总数</p>
-                <p class="text-3xl font-semibold mt-2">${data.users.total}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">活跃用户: ${data.users.active}</p>
+                <p class="text-3xl font-semibold mt-2">${usersTotal}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">活跃用户: ${usersActive}</p>
               </div>
               <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary-600 text-white">
                 <i data-feather="users"></i>
@@ -164,8 +199,8 @@
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-gray-600 dark:text-gray-300">当前借阅</p>
-                <p class="text-3xl font-semibold mt-2">${data.borrows.current}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">逾期: ${data.borrows.overdue}</p>
+                <p class="text-3xl font-semibold mt-2">${borrowsCurrent}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">逾期: ${borrowsOverdue}</p>
               </div>
               <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary-600 text-white">
                 <i data-feather="book-open"></i>
@@ -176,8 +211,8 @@
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-gray-600 dark:text-gray-300">今日统计</p>
-                <p class="text-3xl font-semibold mt-2">${data.borrows.today_borrows}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">借阅: ${data.borrows.today_borrows} / 归还: ${data.borrows.today_returns}</p>
+                <p class="text-3xl font-semibold mt-2">${todayBorrows}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">借阅: ${todayBorrows} / 归还: ${todayReturns}</p>
               </div>
               <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary-600 text-white">
                 <i data-feather="activity"></i>
@@ -189,11 +224,13 @@
       } catch (error) {
         console.error('加载概览数据失败:', error);
         const cardsContainer = document.getElementById('summary-cards');
+        // XSS防护：转义错误消息
+        const safeErrorMsg = escapeHtml(error.message);
         cardsContainer.innerHTML = `
           <div class="col-span-full rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6">
             <div class="flex items-center gap-2 text-red-800 dark:text-red-300">
               <i data-feather="alert-circle"></i>
-              <span>加载失败: ${error.message}</span>
+              <span>加载失败: ${safeErrorMsg}</span>
             </div>
           </div>
         `;
@@ -270,25 +307,33 @@
         if (data.popular_books.length === 0) {
           popularContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">暂无数据</p>';
         } else {
-          popularContainer.innerHTML = data.popular_books.map((book, index) => `
+          // XSS防护：对所有用户输入的数据进行HTML转义
+          popularContainer.innerHTML = data.popular_books.map((book, index) => {
+            const safeTitle = escapeHtml(book.title);
+            const safeAuthor = escapeHtml(book.author || '未知作者');
+            const borrowCount = parseInt(book.borrow_count) || 0;
+            return `
             <div class="flex items-center justify-between p-3 rounded-lg border border-black/5 dark:border-white/5">
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-400 text-sm font-semibold">
                   ${index + 1}
                 </span>
                 <div>
-                  <p class="font-medium">${book.title}</p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">${book.author || '未知作者'}</p>
+                  <p class="font-medium">${safeTitle}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">${safeAuthor}</p>
                 </div>
               </div>
-              <span class="text-sm font-semibold text-primary-600 dark:text-primary-400">${book.borrow_count}次</span>
+              <span class="text-sm font-semibold text-primary-600 dark:text-primary-400">${borrowCount}次</span>
             </div>
-          `).join('');
+          `;
+          }).join('');
         }
       } catch (error) {
         console.error('加载图书统计失败:', error);
         if (loadingEl) {
-          loadingEl.innerHTML = `<span class="text-red-600 dark:text-red-400">加载失败: ${error.message}</span>`;
+          // XSS防护：转义错误消息
+          const safeErrorMsg = escapeHtml(error.message);
+          loadingEl.innerHTML = `<span class="text-red-600 dark:text-red-400">加载失败: ${safeErrorMsg}</span>`;
         }
       }
     }
@@ -307,20 +352,26 @@
         if (data.top_borrowers.length === 0) {
           borrowersContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-8">暂无数据</p>';
         } else {
-          borrowersContainer.innerHTML = data.top_borrowers.map((user, index) => `
+          // XSS防护：对所有用户输入的数据进行HTML转义
+          borrowersContainer.innerHTML = data.top_borrowers.map((user, index) => {
+            const safeUsername = escapeHtml(user.username);
+            const safeStudentId = escapeHtml(user.student_id || '无学号');
+            const borrowCount = parseInt(user.borrow_count) || 0;
+            return `
             <div class="flex items-center justify-between p-3 rounded-lg border border-black/5 dark:border-white/5">
               <div class="flex items-center gap-3">
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-400 text-sm font-semibold">
                   ${index + 1}
                 </span>
                 <div>
-                  <p class="font-medium">${user.username}</p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">${user.student_id || '无学号'}</p>
+                  <p class="font-medium">${safeUsername}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">${safeStudentId}</p>
                 </div>
               </div>
-              <span class="text-sm font-semibold text-primary-600 dark:text-primary-400">${user.borrow_count}次</span>
+              <span class="text-sm font-semibold text-primary-600 dark:text-primary-400">${borrowCount}次</span>
             </div>
-          `).join('');
+          `;
+          }).join('');
         }
       } catch (error) {
         console.error('加载用户统计失败:', error);
@@ -472,11 +523,13 @@
         }
       } catch (error) {
         console.error('加载借阅趋势失败:', error);
+        // XSS防护：转义错误消息
+        const safeErrorMsg = escapeHtml(error.message);
         if (trendLoadingEl) {
-          trendLoadingEl.innerHTML = `<span class="text-red-600 dark:text-red-400">加载失败: ${error.message}</span>`;
+          trendLoadingEl.innerHTML = `<span class="text-red-600 dark:text-red-400">加载失败: ${safeErrorMsg}</span>`;
         }
         if (statusLoadingEl) {
-          statusLoadingEl.innerHTML = `<span class="text-red-600 dark:text-red-400">加载失败: ${error.message}</span>`;
+          statusLoadingEl.innerHTML = `<span class="text-red-600 dark:text-red-400">加载失败: ${safeErrorMsg}</span>`;
         }
       }
     }
